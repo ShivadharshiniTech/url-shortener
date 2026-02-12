@@ -231,6 +231,47 @@ async def redis_health():
     else:
         return {"status": "unhealthy", "redis": "connection failed"}
 
+@app.get("/api/admin/urls")
+async def list_urls(limit: int = 50, db: AsyncSession = Depends(get_db)):
+    """List all URLs (development only)"""
+    result = await db.execute(
+        select(Url).order_by(Url.created_at.desc()).limit(limit)
+    )
+    urls = result.scalars().all()
+    
+    return [
+        {
+            "id": url.id,
+            "short_code": url.short_code,
+            "original_url": url.original_url,
+            "custom_alias": url.custom_alias,
+            "click_count": url.click_count,
+            "created_at": url.created_at,
+            "is_active": url.is_active
+        }
+        for url in urls
+    ]
+
+@app.get("/api/admin/clicks")
+async def list_clicks(limit: int = 100, db: AsyncSession = Depends(get_db)):
+    """List recent clicks (development only)"""
+    result = await db.execute(
+        select(Click).order_by(Click.clicked_at.desc()).limit(limit)
+    )
+    clicks = result.scalars().all()
+    
+    return [
+        {
+            "id": click.id,
+            "url_id": click.url_id,
+            "ip_address": click.ip_address,
+            "user_agent": click.user_agent,
+            "referer": click.referer,
+            "clicked_at": click.clicked_at
+        }
+        for click in clicks
+    ]
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
