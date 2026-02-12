@@ -11,12 +11,19 @@ class Base(DeclarativeBase):
 # Database configuration
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://user:password@localhost/urlshortener")
 
-# Create async engine
+# Neon-optimized engine configuration
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True,  # Set to False in production
+    echo=os.getenv("ENVIRONMENT") == "development",  # Only log in development
     pool_pre_ping=True,
     pool_recycle=300,
+    pool_size=5,  # Small pool for free tier
+    max_overflow=10,
+    connect_args={
+        "server_settings": {
+            "application_name": "url_shortener",
+        }
+    }
 )
 
 # Create session factory

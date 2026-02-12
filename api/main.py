@@ -2,7 +2,7 @@ from fastapi import FastAPI, HTTPException, Depends, Request, Form
 from fastapi.responses import RedirectResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, text
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
 import os
@@ -10,6 +10,8 @@ import os
 from api.database import get_db, engine, Base
 from api.models import Url, Click
 from api.utils import encode_id, decode_base62, is_valid_url, normalize_url, is_valid_alias
+from api.cache import cache
+from api.rate_limit import rate_limiter
 
 app = FastAPI(title="URL Shortener", description="Production-grade URL shortener")
 
@@ -37,22 +39,31 @@ async def home(request: Request):
     """Home page with URL shortening form"""
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.get("/analytics", response_class=HTMLResponse)
+async def analytics_page(request: Request):
+    """Analytics dashboard page"""
+    return templates.TemplateResponse("analytics.html", {"request": request})
+
 @app.post("/api/shorten", response_model=ShortenResponse)
 async def shorten_url(
-    request: ShortenRequest,
+    request_data: ShortenRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db)
 ):
     """Create a shortened URL"""
+    # Rate limiting: 10 requests per minute
+    await rate_limiter.check_rate_limit(request, limit=10, window=60)
+    
     # Validate and normalize URL
-    if not is_valid_url(request.url):
-        normalized_url = normalize_url(request.url)
+    if not is_valid_url(request_data.url):
+        normalized_url = normalize_url(request_data.url)
         if not is_valid_url(normalized_url):
             raise HTTPException(status_code=400, detail="Invalid URL format")
-        request.url = normalized_url
+        request_data.url = normalized_url
     
     # Check custom alias if provided
-    if request.custom_alias:
-        if not is_valid_alias(request.custom_alias):
+    if request_data.custom_alias:
+        if not is_valid_alias(request_data.custom_alias):
             raise HTTPException(
                 status_code=400, 
                 detail="Custom alias must be 3-20 characters (letters, numbers, _, -)"
@@ -60,15 +71,15 @@ async def shorten_url(
         
         # Check if alias already exists
         existing = await db.execute(
-            select(Url).where(Url.custom_alias == request.custom_alias)
+            select(Url).where(Url.custom_alias == request_data.custom_alias)
         )
         if existing.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Custom alias already exists")
     
     # Create new URL record
     new_url = Url(
-        original_url=request.url,
-        custom_alias=request.custom_alias
+        original_url=request_data.url,
+        custom_alias=request_data.custom_alias
     )
     
     db.add(new_url)
@@ -76,12 +87,12 @@ async def shorten_url(
     await db.refresh(new_url)
     
     # Generate response
-    short_code = request.custom_alias or new_url.short_code
+    short_code = request_data.custom_alias or new_url.short_code
     base_url = os.getenv("BASE_URL", "http://localhost:8000")
     
     return ShortenResponse(
         short_url=f"{base_url}/{short_code}",
-        original_url=request.url,
+        original_url=request_data.url,
         short_code=short_code
     )
 
@@ -92,6 +103,22 @@ async def redirect_url(
     db: AsyncSession = Depends(get_db)
 ):
     """Redirect to original URL and track click"""
+    # Try Redis cache first (for popular URLs only)
+    cache_key = f"url:{short_code}"
+    cached_url = await cache.get(cache_key)
+    
+    if cached_url:
+        # Cache hit - redirect immediately and track click in background
+        click = Click(
+            url_id=0,  # We'll update this later if needed
+            ip_address=request.client.host,
+            user_agent=request.headers.get("user-agent"),
+            referer=request.headers.get("referer")
+        )
+        # Note: For cached URLs, we skip detailed click tracking to save DB calls
+        return RedirectResponse(url=cached_url, status_code=301)
+    
+    # Cache miss - query database
     url_record = None
     
     # Try to find by custom alias first
@@ -114,7 +141,7 @@ async def redirect_url(
     if not url_record:
         raise HTTPException(status_code=404, detail="Short URL not found")
     
-    # Track click (async, don't wait)
+    # Track click
     click = Click(
         url_id=url_record.id,
         ip_address=request.client.host,
@@ -131,6 +158,10 @@ async def redirect_url(
     )
     
     await db.commit()
+    
+    # Cache popular URLs (10+ clicks) for 1 hour
+    if url_record.click_count >= 10:
+        await cache.set(cache_key, url_record.original_url, ttl=3600)
     
     return RedirectResponse(url=url_record.original_url, status_code=301)
 
@@ -169,6 +200,36 @@ async def get_stats(
         "created_at": url_record.created_at,
         "is_active": url_record.is_active
     }
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "service": "url-shortener",
+        "version": "1.0.0"
+    }
+
+@app.get("/api/health/db")
+async def database_health(db: AsyncSession = Depends(get_db)):
+    """Database health check"""
+    try:
+        await db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database unhealthy: {str(e)}")
+
+@app.get("/api/health/redis")
+async def redis_health():
+    """Redis health check"""
+    if not cache.enabled:
+        return {"status": "disabled", "redis": "not configured"}
+    
+    is_healthy = await cache.health_check()
+    if is_healthy:
+        return {"status": "healthy", "redis": "connected"}
+    else:
+        return {"status": "unhealthy", "redis": "connection failed"}
 
 if __name__ == "__main__":
     import uvicorn

@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Analytics - URL Shortener</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <!-- Header -->
+    <header class="bg-white shadow-sm">
+        <div class="container mx-auto px-4 py-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center space-x-2">
+                    <a href="/" class="text-blue-600 hover:text-blue-800">
+                        <i class="fas fa-arrow-left mr-2"></i>Back
+                    </a>
+                    <i class="fas fa-chart-bar text-blue-600 text-2xl"></i>
+                    <h1 class="text-2xl font-bold text-gray-800">Analytics</h1>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-8">
+        <!-- URL Lookup -->
+        <div class="max-w-2xl mx-auto mb-8">
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-search mr-2"></i>View URL Statistics
+                </h2>
+                <div class="flex space-x-2">
+                    <input 
+                        type="text" 
+                        id="shortCode" 
+                        placeholder="Enter short code (e.g., abc123 or custom-alias)"
+                        class="flex-1 px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                    <button 
+                        onclick="loadStats()" 
+                        class="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        <i class="fas fa-search"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Stats Display -->
+        <div id="statsContainer" class="hidden">
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <!-- Total Clicks -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-blue-100 rounded-full">
+                            <i class="fas fa-mouse-pointer text-blue-600 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm text-gray-600">Total Clicks</p>
+                            <p id="totalClicks" class="text-2xl font-bold text-gray-800">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Created Date -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-green-100 rounded-full">
+                            <i class="fas fa-calendar text-green-600 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm text-gray-600">Created</p>
+                            <p id="createdDate" class="text-lg font-bold text-gray-800">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Status -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-purple-100 rounded-full">
+                            <i class="fas fa-toggle-on text-purple-600 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm text-gray-600">Status</p>
+                            <p id="urlStatus" class="text-lg font-bold text-gray-800">-</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Short Code -->
+                <div class="bg-white rounded-lg shadow-lg p-6">
+                    <div class="flex items-center">
+                        <div class="p-3 bg-orange-100 rounded-full">
+                            <i class="fas fa-link text-orange-600 text-xl"></i>
+                        </div>
+                        <div class="ml-4">
+                            <p class="text-sm text-gray-600">Short Code</p>
+                            <p id="displayShortCode" class="text-lg font-bold text-gray-800">-</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- URL Details -->
+            <div class="bg-white rounded-lg shadow-lg p-6 mb-8">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-info-circle mr-2"></i>URL Details
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Original URL:</label>
+                        <div class="flex items-center space-x-2">
+                            <input 
+                                type="text" 
+                                id="originalUrl" 
+                                readonly 
+                                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono"
+                            >
+                            <button 
+                                onclick="openOriginalUrl()" 
+                                class="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+                                title="Open original URL"
+                            >
+                                <i class="fas fa-external-link-alt"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Short URL:</label>
+                        <div class="flex items-center space-x-2">
+                            <input 
+                                type="text" 
+                                id="fullShortUrl" 
+                                readonly 
+                                class="flex-1 px-4 py-2 border border-gray-300 rounded-lg bg-gray-50 font-mono"
+                            >
+                            <button 
+                                onclick="copyShortUrl()" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                title="Copy to clipboard"
+                            >
+                                <i class="fas fa-copy"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Performance Insights -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h3 class="text-lg font-semibold text-gray-800 mb-4">
+                    <i class="fas fa-tachometer-alt mr-2"></i>Performance Insights
+                </h3>
+                <div id="performanceInsights" class="space-y-3">
+                    <!-- Dynamic content will be added here -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Error Display -->
+        <div id="errorContainer" class="hidden">
+            <div class="max-w-2xl mx-auto">
+                <div class="bg-red-50 border border-red-200 rounded-lg p-6">
+                    <div class="flex items-center mb-2">
+                        <i class="fas fa-exclamation-triangle text-red-600 text-xl mr-3"></i>
+                        <h3 class="text-lg font-semibold text-red-800">Error</h3>
+                    </div>
+                    <p id="errorMessage" class="text-red-700"></p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        async function loadStats() {
+            const shortCode = document.getElementById('shortCode').value.trim();
+            if (!shortCode) {
+                alert('Please enter a short code');
+                return;
+            }
+
+            // Hide previous results
+            document.getElementById('statsContainer').classList.add('hidden');
+            document.getElementById('errorContainer').classList.add('hidden');
+
+            try {
+                const response = await fetch(`/api/stats/${shortCode}`);
+                const data = await response.json();
+
+                if (response.ok) {
+                    displayStats(data);
+                } else {
+                    showError(data.detail || 'Failed to load statistics');
+                }
+            } catch (error) {
+                showError('Network error. Please try again.');
+            }
+        }
+
+        function displayStats(data) {
+            // Update stats cards
+            document.getElementById('totalClicks').textContent = data.click_count.toLocaleString();
+            document.getElementById('createdDate').textContent = new Date(data.created_at).toLocaleDateString();
+            document.getElementById('urlStatus').textContent = data.is_active ? 'Active' : 'Inactive';
+            document.getElementById('displayShortCode').textContent = data.short_code;
+
+            // Update URL details
+            document.getElementById('originalUrl').value = data.original_url;
+            document.getElementById('fullShortUrl').value = `${window.location.origin}/${data.short_code}`;
+
+            // Generate performance insights
+            generateInsights(data);
+
+            // Show stats container
+            document.getElementById('statsContainer').classList.remove('hidden');
+        }
+
+        function generateInsights(data) {
+            const container = document.getElementById('performanceInsights');
+            container.innerHTML = '';
+
+            const insights = [];
+
+            // Click performance
+            if (data.click_count === 0) {
+                insights.push({
+                    icon: 'fas fa-info-circle text-blue-600',
+                    text: 'This URL hasn\'t been clicked yet. Share it to start tracking!'
+                });
+            } else if (data.click_count < 10) {
+                insights.push({
+                    icon: 'fas fa-chart-line text-green-600',
+                    text: `${data.click_count} clicks so far. URL is not cached yet.`
+                });
+            } else {
+                insights.push({
+                    icon: 'fas fa-rocket text-purple-600',
+                    text: `${data.click_count} clicks! This URL is cached for faster redirects.`
+                });
+            }
+
+            // Age insights
+            const createdDate = new Date(data.created_at);
+            const daysSinceCreated = Math.floor((new Date() - createdDate) / (1000 * 60 * 60 * 24));
+            
+            if (daysSinceCreated === 0) {
+                insights.push({
+                    icon: 'fas fa-star text-yellow-600',
+                    text: 'Newly created URL! Fresh and ready to use.'
+                });
+            } else {
+                insights.push({
+                    icon: 'fas fa-calendar-alt text-gray-600',
+                    text: `Created ${daysSinceCreated} day${daysSinceCreated !== 1 ? 's' : ''} ago.`
+                });
+            }
+
+            // Status insights
+            if (data.is_active) {
+                insights.push({
+                    icon: 'fas fa-check-circle text-green-600',
+                    text: 'URL is active and ready for redirects.'
+                });
+            } else {
+                insights.push({
+                    icon: 'fas fa-pause-circle text-red-600',
+                    text: 'URL is inactive and won\'t redirect.'
+                });
+            }
+
+            // Render insights
+            insights.forEach(insight => {
+                const div = document.createElement('div');
+                div.className = 'flex items-center space-x-3 p-3 bg-gray-50 rounded-lg';
+                div.innerHTML = `
+                    <i class="${insight.icon}"></i>
+                    <span class="text-gray-700">${insight.text}</span>
+                `;
+                container.appendChild(div);
+            });
+        }
+
+        function showError(message) {
+            document.getElementById('errorMessage').textContent = message;
+            document.getElementById('errorContainer').classList.remove('hidden');
+        }
+
+        function openOriginalUrl() {
+            const url = document.getElementById('originalUrl').value;
+            if (url) {
+                window.open(url, '_blank');
+            }
+        }
+
+        function copyShortUrl() {
+            const shortUrl = document.getElementById('fullShortUrl');
+            shortUrl.select();
+            document.execCommand('copy');
+            
+            // Show feedback
+            const button = event.target.closest('button');
+            const originalHTML = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-check"></i>';
+            button.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+            button.classList.add('bg-green-600');
+            
+            setTimeout(() => {
+                button.innerHTML = originalHTML;
+                button.classList.remove('bg-green-600');
+                button.classList.add('bg-blue-600', 'hover:bg-blue-700');
+            }, 2000);
+        }
+
+        // Allow Enter key to trigger search
+        document.getElementById('shortCode').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                loadStats();
+            }
+        });
+    </script>
+</body>
+</html>

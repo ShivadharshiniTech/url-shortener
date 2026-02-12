@@ -14,9 +14,25 @@ A production-grade URL shortener built with FastAPI and PostgreSQL.
 ## Architecture
 
 - **Backend**: FastAPI with async SQLAlchemy
-- **Database**: PostgreSQL with connection pooling
+- **Database**: Neon PostgreSQL (Free tier: 512MB RAM, 10GB storage)
 - **URL Generation**: Base62 encoding from auto-increment IDs
 - **Frontend**: Jinja2 templates with TailwindCSS
+
+## Why Neon PostgreSQL?
+
+- **Free tier**: 512MB RAM, 10GB storage (perfect for URL shortener)
+- **Built-in connection pooling**: No need for external pgbouncer
+- **Serverless**: Scales to zero when not in use
+- **Global**: Low latency worldwide
+- **No maintenance**: Automatic backups and updates
+
+## Why Upstash Redis?
+
+- **Free tier**: 10k commands/day, 256MB storage
+- **Global edge**: Low latency worldwide
+- **Smart caching**: Only popular URLs (10+ clicks) are cached
+- **Graceful fallback**: App works without Redis
+- **Rate limiting**: Prevent abuse with Redis counters
 
 ## Quick Start
 
@@ -25,18 +41,35 @@ A production-grade URL shortener built with FastAPI and PostgreSQL.
    pip install -r requirements.txt
    ```
 
-2. **Set up database**:
+2. **Set up Neon Database**:
    ```bash
-   # Create PostgreSQL database
-   createdb urlshortener
+   # 1. Go to https://neon.tech and create free account
+   # 2. Create new project
+   # 3. Copy connection string from dashboard
    
    # Copy environment file
    cp .env.example .env
    
-   # Edit .env with your database credentials
+   # Edit .env and replace DATABASE_URL with your Neon connection string
+   # Example: postgresql+asyncpg://user:pass@ep-name-123.us-east-2.aws.neon.tech/neondb?sslmode=require
    ```
 
-3. **Run the application**:
+3. **Set up Redis (Optional but Recommended)**:
+   ```bash
+   # 1. Go to https://upstash.com and create free account
+   # 2. Create new Redis database
+   # 3. Copy connection URL from dashboard
+   
+   # Add REDIS_URL to your .env file
+   # Example: redis://default:password@region-redis.upstash.io:6379
+   ```
+
+3. **Initialize database**:
+   ```bash
+   python init_db.py
+   ```
+
+4. **Run the application**:
    ```bash
    python run.py
    ```
