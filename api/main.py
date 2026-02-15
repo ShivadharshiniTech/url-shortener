@@ -30,10 +30,28 @@ class ShortenResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup():
-    """Create database tables on startup"""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    """Create database tables on startup with error handling"""
+    try:
+        print("🔄 Attempting database connection...")
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        print("✅ Database tables created successfully")
+    except Exception as e:
+        print(f"⚠️ Database startup error: {e}")
+        print("App will continue running, but database operations may fail")
+        # Don't crash the app - let it start anyway
 
+# Health check endpoints (must come before /{short_code})
+@app.get("/health")
+async def health_check():
+    """Health check endpoint for monitoring"""
+    return {
+        "status": "healthy",
+        "service": "url-shortener",
+        "version": "1.0.0"
+    }
+
+# Root and page routes (must come before /{short_code})
 @app.get("/", response_class=HTMLResponse)
 async def home(request: Request):
     """Home page with URL shortening form"""
@@ -43,6 +61,69 @@ async def home(request: Request):
 async def analytics_page(request: Request):
     """Analytics dashboard page"""
     return templates.TemplateResponse("analytics.html", {"request": request})
+
+@app.get("/api/health/db")
+async def database_health(db: AsyncSession = Depends(get_db)):
+    """Database health check"""
+    try:
+        await db.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        raise HTTPException(status_code=503, detail=f"Database unhealthy: {str(e)}")
+
+@app.get("/api/health/redis")
+async def redis_health():
+    """Redis health check"""
+    if not cache.enabled:
+        return {"status": "disabled", "redis": "not configured"}
+    
+    is_healthy = await cache.health_check()
+    if is_healthy:
+        return {"status": "healthy", "redis": "connected"}
+    else:
+        return {"status": "unhealthy", "redis": "connection failed"}
+
+# Admin endpoints (must come before /{short_code})
+@app.get("/api/admin/urls")
+async def list_urls(limit: int = 50, db: AsyncSession = Depends(get_db)):
+    """List all URLs (development only)"""
+    result = await db.execute(
+        select(Url).order_by(Url.created_at.desc()).limit(limit)
+    )
+    urls = result.scalars().all()
+    
+    return [
+        {
+            "id": url.id,
+            "short_code": url.short_code,
+            "original_url": url.original_url,
+            "custom_alias": url.custom_alias,
+            "click_count": url.click_count,
+            "created_at": url.created_at,
+            "is_active": url.is_active
+        }
+        for url in urls
+    ]
+
+@app.get("/api/admin/clicks")
+async def list_clicks(limit: int = 100, db: AsyncSession = Depends(get_db)):
+    """List recent clicks (development only)"""
+    result = await db.execute(
+        select(Click).order_by(Click.clicked_at.desc()).limit(limit)
+    )
+    clicks = result.scalars().all()
+    
+    return [
+        {
+            "id": click.id,
+            "url_id": click.url_id,
+            "ip_address": click.ip_address,
+            "user_agent": click.user_agent,
+            "referer": click.referer,
+            "clicked_at": click.clicked_at
+        }
+        for click in clicks
+    ]
 
 @app.post("/api/shorten", response_model=ShortenResponse)
 async def shorten_url(
@@ -200,77 +281,6 @@ async def get_stats(
         "created_at": url_record.created_at,
         "is_active": url_record.is_active
     }
-
-@app.get("/health")
-async def health_check():
-    """Health check endpoint for monitoring"""
-    return {
-        "status": "healthy",
-        "service": "url-shortener",
-        "version": "1.0.0"
-    }
-
-@app.get("/api/health/db")
-async def database_health(db: AsyncSession = Depends(get_db)):
-    """Database health check"""
-    try:
-        await db.execute(text("SELECT 1"))
-        return {"status": "healthy", "database": "connected"}
-    except Exception as e:
-        raise HTTPException(status_code=503, detail=f"Database unhealthy: {str(e)}")
-
-@app.get("/api/health/redis")
-async def redis_health():
-    """Redis health check"""
-    if not cache.enabled:
-        return {"status": "disabled", "redis": "not configured"}
-    
-    is_healthy = await cache.health_check()
-    if is_healthy:
-        return {"status": "healthy", "redis": "connected"}
-    else:
-        return {"status": "unhealthy", "redis": "connection failed"}
-
-@app.get("/api/admin/urls")
-async def list_urls(limit: int = 50, db: AsyncSession = Depends(get_db)):
-    """List all URLs (development only)"""
-    result = await db.execute(
-        select(Url).order_by(Url.created_at.desc()).limit(limit)
-    )
-    urls = result.scalars().all()
-    
-    return [
-        {
-            "id": url.id,
-            "short_code": url.short_code,
-            "original_url": url.original_url,
-            "custom_alias": url.custom_alias,
-            "click_count": url.click_count,
-            "created_at": url.created_at,
-            "is_active": url.is_active
-        }
-        for url in urls
-    ]
-
-@app.get("/api/admin/clicks")
-async def list_clicks(limit: int = 100, db: AsyncSession = Depends(get_db)):
-    """List recent clicks (development only)"""
-    result = await db.execute(
-        select(Click).order_by(Click.clicked_at.desc()).limit(limit)
-    )
-    clicks = result.scalars().all()
-    
-    return [
-        {
-            "id": click.id,
-            "url_id": click.url_id,
-            "ip_address": click.ip_address,
-            "user_agent": click.user_agent,
-            "referer": click.referer,
-            "clicked_at": click.clicked_at
-        }
-        for click in clicks
-    ]
 
 if __name__ == "__main__":
     import uvicorn
